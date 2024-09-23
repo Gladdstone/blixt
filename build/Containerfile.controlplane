@@ -1,6 +1,6 @@
 FROM --platform=$BUILDPLATFORM tonistiigi/xx AS xx
 
-FROM --platform=$BUILDPLATFORM rust:alpine
+FROM --platform=$BUILDPLATFORM rust:alpine AS builder
 ARG TARGETPLATFORM
 
 RUN apk add clang lld
@@ -8,8 +8,19 @@ COPY --from=xx / /
 
 WORKDIR /workspace
 
-RUN --mount=type=bind,source=src,target=src \
-    --mount=type=bind,source=Cargo.toml,target=Cargo.toml \
-    --mount=type=bind,source=Cargo.lock,target=Cargo.lock \
-    xx-cargo build --release --target-dir ./build && \
-    xx-verify ./build/$(xx-cargo --print-target-triple)/release/controller
+RUN --mount=type=bind,source=controlplane/src,target=/workspace/src \
+    --mount=type=bind,source=controlplane/Cargo.toml,target=/workspace/Cargo.toml \
+    --mount=type=bind,source=controlplane/Cargo.lock,target=/workspace/Cargo.lock \
+    xx-cargo build --release --target-dir ./build
+    # xx-verify ./build/$(xx-cargo --print-target-triple)/release/controller
+
+# ENTRYPOINT ["/bin/sh", "-c", "sleep infinity"]
+
+
+FROM --platform=$BUILDPLATFORM gcr.io/distroless/static:nonroot
+WORKDIR /
+COPY --from=builder /workspace/build/aarch64-unknown-linux-musl/release/controller /usr/local/bin/
+
+ENTRYPOINT ["controller"]
+
+# USER 65532:65532
